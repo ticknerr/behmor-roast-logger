@@ -48,7 +48,9 @@ The libraries I chose, because they're genuinely great:
 
 ## Screenshots
 
-> *(Add your own screenshots here — the roast profile chart in particular looks great)*
+![The dashboard](public/screenshots/screenshot1.png)
+
+![What a recorded roast looks like](public/screenshots/screenshot2.png)
 
 ---
 
