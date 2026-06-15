@@ -220,8 +220,8 @@ export default function RoastForm({ beans, preSelectBeanId, onSave, onCancel }) 
           style={{ width: 130 }}
           value={r.drum}
           options={[
-            { label: "Fast (D)", value: "fast" },
-            { label: "Slow (P)", value: "slow" },
+            { label: "Fast", value: "fast" },
+            { label: "Slow", value: "slow" },
           ]}
           onChange={(v) => updateEntry(r.key, "drum", v)}
         />

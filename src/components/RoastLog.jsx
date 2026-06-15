@@ -110,10 +110,13 @@ function RoastProfileChart({ entries }) {
     const hasExhaustTemp = sorted.some((e) => e.exhaustTemp != null);
 
     // ── Power dataset ─────────────────────────────────────────────────────────
-    const powerData = sorted.map((e) => ({
-      x: toSeconds(e),
-      y: parsePower(e.power),
-    }));
+    const powerData = [];
+    if (firstSec > 0) powerData.push({ x: 0, y: null });
+    for (const e of sorted) {
+        powerData.push({
+            x: toSeconds(e), y: parsePower(e.power)
+            })
+    }
 
     // ── Drum dataset ──────────────────────────────────────────────────────────
     const drumData = [];
@@ -330,7 +333,7 @@ function RoastProfileChart({ entries }) {
                 const v   = item.parsed.y;
                 if (lbl === "Drum Speed") {
                   if (v == null) return "  Drum: —";
-                  return `  Drum: ${v === 1 ? "Fast (D)" : "Slow (P)"}`;
+                  return `  Drum: ${v === 1 ? "Fast" : "Slow"}`;
                 }
                 if (lbl === "Power (%)") {
                   return v != null ? `  Power: ${v}%` : "  Power: —";
@@ -396,7 +399,7 @@ function RoastProfileChart({ entries }) {
             stackWeight: 2,
             title: { display: true, text: "Power (%)", color: "#d46b08" },
             min: 0,
-            max: 110,
+            max: 100,
             clip: false,
             border: { color: "rgba(212,107,8,0.20)" },
             grid:   { color: "rgba(212,107,8,0.07)" },
@@ -561,7 +564,7 @@ function RoastStepsTable({ entries }) {
       width: 90,
       render: (v) =>
         v ? (
-          <Tag color="blue">{v === "fast" ? "Fast (D)" : "Slow (P)"}</Tag>
+          <Tag color="blue">{v === "fast" ? "Fast" : "Slow"}</Tag>
         ) : (
           <Text type="secondary">—</Text>
         ),
