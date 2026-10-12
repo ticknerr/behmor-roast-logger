@@ -6,13 +6,17 @@ import {
   FireOutlined,
   ExportOutlined,
   ImportOutlined,
+  UnorderedListOutlined,
+  SwapOutlined,
 } from "@ant-design/icons";
 
-import { loadData, saveData, exportJSON, importJSON } from "./storage";
+import { loadData, saveData, exportJSON, importJSON, emptyData } from "./storage";
 import Dashboard from "./components/Dashboard";
 import BeanForm from "./components/BeanForm";
 import RoastForm from "./components/RoastForm";
 import RoastLog from "./components/RoastLog";
+import AllRoasts from "./components/AllRoasts";
+import RoastCompare from "./components/RoastCompare";
 
 const { Header, Content } = Layout;
 
@@ -22,6 +26,8 @@ export default function App() {
   const [selectedBeanId, setSelectedBeanId] = useState(null);
   const [editingBean, setEditingBean] = useState(null);
   const [preSelectBeanId, setPreSelectBeanId] = useState(null);
+  // Roasts picked for comparison, as "beanId:roastId" keys
+  const [compareKeys, setCompareKeys] = useState([null, null]);
 
   useEffect(() => saveData(data), [data]);
 
@@ -126,7 +132,7 @@ export default function App() {
   // ── Data management ─────────────────────────────────────────────────────────
 
   const clearData = () => {
-    setData({ version: 2, beans: [] });
+    setData(emptyData());
     setSelectedBeanId(null);
     setView("dashboard");
   };
@@ -147,6 +153,16 @@ export default function App() {
   const goToNewRoastForBean = (bean) => {
     setPreSelectBeanId(bean.id);
     setView("newRoast");
+  };
+
+  const openBean = (beanId) => {
+    setSelectedBeanId(beanId);
+    setView("roasts");
+  };
+
+  const openCompare = (keyA, keyB = null) => {
+    setCompareKeys([keyA, keyB]);
+    setView("compare");
   };
 
   const handleMenuClick = (e) => {
@@ -177,6 +193,8 @@ export default function App() {
               icon: <DashboardOutlined />,
               label: "Dashboard",
             },
+            { key: "allRoasts", icon: <UnorderedListOutlined />, label: "All Roasts" },
+            { key: "compare", icon: <SwapOutlined />, label: "Compare" },
             { key: "newBean", icon: <CoffeeOutlined />, label: "New Bean" },
             { key: "newRoast", icon: <FireOutlined />, label: "New Roast" },
           ]}
@@ -217,10 +235,7 @@ export default function App() {
             <Dashboard
               data={data}
               onClearData={clearData}
-              onSelectBean={(bean) => {
-                setSelectedBeanId(bean.id);
-                setView("roasts");
-              }}
+              onSelectBean={(bean) => openBean(bean.id)}
               onEditBean={(bean) => {
                 setEditingBean(bean);
                 setView("editBean");
@@ -265,6 +280,23 @@ export default function App() {
               onAddComment={addComment}
               onDeleteRoast={deleteRoast}
               onNewRoast={() => goToNewRoastForBean(selectedBean)}
+              onCompare={(key) => openCompare(key)}
+            />
+          )}
+
+          {view === "allRoasts" && (
+            <AllRoasts
+              beans={data.beans}
+              onOpenBean={openBean}
+              onCompare={openCompare}
+            />
+          )}
+
+          {view === "compare" && (
+            <RoastCompare
+              beans={data.beans}
+              initialA={compareKeys[0]}
+              initialB={compareKeys[1]}
             />
           )}
         </Content>

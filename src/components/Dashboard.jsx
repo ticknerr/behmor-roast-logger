@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Card,
   Row,
@@ -10,6 +11,7 @@ import {
   Space,
   Statistic,
   Typography,
+  Segmented,
 } from "antd";
 import {
   FireOutlined,
@@ -17,10 +19,40 @@ import {
   EditOutlined,
   DeleteOutlined,
   PlusOutlined,
+  SortAscendingOutlined,
+  SortDescendingOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { lastRoastDate, averageRating, compareText, compareDate } from "../utils/roast";
 
 const { Text } = Typography;
+
+// Natural direction for each sort; the toggle flips it
+const SORTS = {
+  name:   { label: "Name",          desc: false, ascLabel: "A–Z",          descLabel: "Z–A" },
+  date:   { label: "Last roasted",  desc: true,  ascLabel: "Oldest first",  descLabel: "Newest first" },
+  rating: { label: "Rating",        desc: true,  ascLabel: "Lowest first",  descLabel: "Highest first" },
+};
+
+function sortBeans(beans, mode, desc) {
+  return [...beans].sort((a, b) => {
+    // Beans with nothing to sort on (never roasted / unrated) always go last
+    if (mode === "date") {
+      const da = lastRoastDate(a), db = lastRoastDate(b);
+      if (!da || !db) return (da ? 0 : 1) - (db ? 0 : 1) || compareText(a.title, b.title);
+      const cmp = compareDate(da, db);
+      return (desc ? -cmp : cmp) || compareText(a.title, b.title);
+    }
+    if (mode === "rating") {
+      const ra = averageRating(a), rb = averageRating(b);
+      if (!ra || !rb) return (ra ? 0 : 1) - (rb ? 0 : 1) || compareText(a.title, b.title);
+      const cmp = ra - rb;
+      return (desc ? -cmp : cmp) || compareText(a.title, b.title);
+    }
+    const cmp = compareText(a.title, b.title);
+    return desc ? -cmp : cmp;
+  });
+}
 
 export default function Dashboard({
   data,
@@ -30,6 +62,9 @@ export default function Dashboard({
   onDeleteBean,
   onNewRoastForBean,
 }) {
+  const [sortMode, setSortMode] = useState("name");
+  const [sortDesc, setSortDesc] = useState(SORTS.name.desc);
+  const sortedBeans = sortBeans(data.beans, sortMode, sortDesc);
   const totalBeans = data.beans.length;
   const totalRoasts = data.beans.reduce((a, b) => a + b.roasts.length, 0);
   const allRatings = data.beans
@@ -69,19 +104,36 @@ export default function Dashboard({
     <>
 
       {/* Bean list */}
-      <Card title="Your Beans">
+      <Card
+        title="Your Beans"
+        extra={
+          <Space wrap size={8}>
+            <Text type="secondary">Sort by</Text>
+            <Segmented
+              size="small"
+              value={sortMode}
+              onChange={(v) => {
+                setSortMode(v);
+                setSortDesc(SORTS[v].desc);
+              }}
+              options={Object.entries(SORTS).map(([value, s]) => ({ value, label: s.label }))}
+            />
+            <Button
+              size="small"
+              icon={sortDesc ? <SortDescendingOutlined /> : <SortAscendingOutlined />}
+              onClick={() => setSortDesc((d) => !d)}
+            >
+              {sortDesc ? SORTS[sortMode].descLabel : SORTS[sortMode].ascLabel}
+            </Button>
+          </Space>
+        }
+      >
         <List
-          dataSource={data.beans}
+          dataSource={sortedBeans}
           locale={{ emptyText: "No beans yet — add one from the menu above." }}
           renderItem={(bean) => {
-            const sortedByDate = [...bean.roasts].sort(
-              (a, b) => new Date(b.date) - new Date(a.date)
-            );
-            const lastRoast = sortedByDate[0];
-            const ratings = bean.roasts.map((r) => r.rating).filter((r) => r > 0);
-            const avgRating = ratings.length
-              ? ratings.reduce((a, b) => a + b, 0) / ratings.length
-              : 0;
+            const lastRoasted = lastRoastDate(bean);
+            const avgRating = averageRating(bean);
 
             return (
               <List.Item
@@ -146,10 +198,10 @@ export default function Dashboard({
                       {bean.country && <span>{bean.country}</span>}
                       {bean.processing && <span>{bean.processing}</span>}
                       {bean.varietal && <span>{bean.varietal}</span>}
-                      {lastRoast && (
+                      {lastRoasted && (
                         <Text type="secondary">
                           Last roasted{" "}
-                          {dayjs(lastRoast.date).format("D MMM YYYY")}
+                          {dayjs(lastRoasted).format("D MMM YYYY")}
                         </Text>
                       )}
                     </Space>

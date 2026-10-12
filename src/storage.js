@@ -1,7 +1,21 @@
 const KEY = "coffee_roast_data";
-const VERSION = 3;
+export const VERSION = 3;
 
-function migrate(raw) {
+// Data shape (v3):
+//   { version, beans: [ { id, title, ...details, roasts: [
+//       { id, date, batchWeightIn, batchWeightOut, colourLevel, rating, comments,
+//         entries: [ { key, minutes, seconds, timeDisplay, phase,
+//                      temp,          // roaster WALL temp (labelled "Bean Temp" before 2026-10)
+//                      exhaustTemp, power, drum } ] } ] } ] }
+//
+// Any change to this shape must bump VERSION and add a step to migrate() so
+// older localStorage data and older backup files keep loading.
+
+export function emptyData() {
+  return { version: VERSION, beans: [] };
+}
+
+export function migrate(raw) {
   const v = raw.version || 1;
   let data = { ...raw };
 
@@ -38,12 +52,23 @@ function migrate(raw) {
 }
 
 export function loadData() {
+  let raw = null;
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return { version: VERSION, beans: [] };
+    raw = localStorage.getItem(KEY);
+    if (!raw) return emptyData();
     return migrate(JSON.parse(raw));
   } catch {
-    return { version: VERSION, beans: [] };
+    // Never silently lose history: if the stored data can't be read, park a
+    // copy under a separate key before the app starts fresh (the next save
+    // would otherwise overwrite it).
+    if (raw) {
+      try {
+        localStorage.setItem(`${KEY}_unreadable_${Date.now()}`, raw);
+      } catch {
+        /* storage full — nothing more we can do */
+      }
+    }
+    return emptyData();
   }
 }
 

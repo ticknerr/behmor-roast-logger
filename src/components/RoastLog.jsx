@@ -12,6 +12,7 @@ import {
   Typography,
   Divider,
   Empty,
+  Segmented,
 } from "antd";
 import {
   DeleteOutlined,
@@ -19,60 +20,31 @@ import {
   PlusOutlined,
   ArrowLeftOutlined,
   CoffeeOutlined,
+  SwapOutlined,
+  SortAscendingOutlined,
+  SortDescendingOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { Chart, registerables } from "chart.js";
+
+import {
+  COLOUR_TAG,
+  PHASE_COLORS,
+  PHASE_COLOR_FALLBACK,
+  toSeconds,
+  fmtTime,
+  parsePower,
+  parseDrum,
+  roastNumbers,
+  roastKey,
+  compareDate,
+} from "../utils/roast";
 
 Chart.register(...registerables);
 
 const { Text } = Typography;
 
-// Colour level → Ant Design tag colour
-const COLOUR_TAG = {
-  Light: "gold",
-  "Medium Light": "orange",
-  Medium: "volcano",
-  "Medium Dark": "magenta",
-  Dark: "red",
-  Espresso: "black",
-};
-
-// ── Phase colours — progress through the roast journey ────────────────────────
-const PHASE_COLORS = {
-  "Charge":              "rgba(107, 114, 128, 0.88)", // cool grey
-  "Drying":              "rgba(251, 191,  36, 0.88)", // warm yellow
-  "Yellowing":           "rgba(245, 158,  11, 0.88)", // amber
-  "Maillard Reaction":   "rgba(234,  88,  12, 0.88)", // deep orange
-  "First Crack Start":   "rgba(220,  38,  38, 0.88)", // red
-  "First Crack Rolling": "rgba(185,  28,  28, 0.88)", // dark red
-  "Development":         "rgba(124,  58, 237, 0.88)", // purple
-  "Drop":                "rgba( 55,  65,  81, 0.88)", // near-black charcoal
-};
-const PHASE_COLOR_FALLBACK = "rgba(156, 163, 175, 0.88)";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function toSeconds(entry) {
-  return (entry.minutes ?? 0) * 60 + (entry.seconds ?? 0);
-}
-
-function fmtTime(totalSeconds) {
-  const m = Math.floor(totalSeconds / 60);
-  const s = Math.round(totalSeconds % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function parsePower(power) {
-  if (!power) return null;
-  const n = parseInt(power, 10);
-  return isNaN(n) ? null : n;
-}
-
-function parseDrum(drum) {
-  if (!drum) return null;
-  return drum === "fast" ? 1 : 0.5;
-}
-
+// Shared helpers and colours live in utils/roast.js
 // ── Roast Profile Chart ───────────────────────────────────────────────────────
 
 function RoastProfileChart({ entries }) {
@@ -92,7 +64,7 @@ function RoastProfileChart({ entries }) {
     const firstSec = toSeconds(sorted[0]);
     const maxSec = toSeconds(sorted[sorted.length - 1]);
 
-    // ── Bean temperature dataset ───────────────────────────────────────────────
+    // ── Wall temperature dataset (stored as `temp`) ────────────────────────────
     const tempData = [];
     if (firstSec > 0) tempData.push({ x: 0, y: 0 });
     for (const e of sorted) {
@@ -210,10 +182,10 @@ function RoastProfileChart({ entries }) {
 
     // ── Build datasets — exhaust temp only included when data exists ───────────
     const datasets = [
-      // ── Bean Temperature — smooth line ───────────────────────────────────────
+      // ── Wall Temperature — smooth line ───────────────────────────────────────
       {
         type: "line",
-        label: "Bean Temp (°C)",
+        label: "Wall Temp (°C)",
         data: tempData,
         yAxisID: "yTemp",
         order: 1,
@@ -243,7 +215,7 @@ function RoastProfileChart({ entries }) {
         pointRadius: 4,
         pointHoverRadius: 7,
         pointBackgroundColor: "#08979c",
-        borderDash: [5, 3],   // dashed so it's visually distinct from bean temp
+        borderDash: [5, 3],   // dashed so it's visually distinct from wall temp
         spanGaps: false,
       });
     }
@@ -341,8 +313,8 @@ function RoastProfileChart({ entries }) {
                 if (lbl === "Exhaust (°C)") {
                   return v != null ? `  Exhaust: ${v}°C` : "  Exhaust: —";
                 }
-                // Bean Temp
-                return v != null ? `  Bean Temp: ${v}°C` : "  Bean Temp: —";
+                // Wall Temp
+                return v != null ? `  Wall Temp: ${v}°C` : "  Wall Temp: —";
               },
               afterBody(items) {
                 if (items.length === 0) return [];
@@ -521,7 +493,7 @@ function RoastStepsTable({ entries }) {
       render: (v) => v ?? <Text type="secondary">—</Text>,
     },
     {
-      title: "Temp",
+      title: "Wall",
       dataIndex: "temp",
       key: "temp",
       width: 80,
@@ -591,21 +563,25 @@ export default function RoastLog({
   onAddComment,
   onDeleteRoast,
   onNewRoast,
+  onCompare,
 }) {
   const [sortMode, setSortMode] = useState("date");
+  const [sortDesc, setSortDesc] = useState(true);
   const [commentDrafts, setCommentDrafts] = useState({});
   const [expandedSteps, setExpandedSteps] = useState({});
 
-  const sortedRoasts = [...bean.roasts].sort((a, b) => {
-    if (sortMode === "rating") return (b.rating || 0) - (a.rating || 0);
-    return new Date(b.date) - new Date(a.date);
-  });
+  const numbers = roastNumbers(bean);
+  const roastNumber = (r) => numbers.get(r.id);
 
-  const chronoOrder = [...bean.roasts].sort(
-    (a, b) => new Date(a.date) - new Date(b.date)
-  );
-  const roastNumber = (r) =>
-    chronoOrder.findIndex((x) => x.id === r.id) + 1;
+  // Rating ties fall back to roast order, so the result is always predictable
+  const sortedRoasts = [...bean.roasts].sort((a, b) => {
+    const byNumber = roastNumber(a) - roastNumber(b);
+    const cmp =
+      sortMode === "rating"
+        ? (a.rating || 0) - (b.rating || 0) || byNumber
+        : compareDate(a.date, b.date) || byNumber;
+    return sortDesc ? -cmp : cmp;
+  });
 
   const confirmDeleteRoast = (roastId) => {
     Modal.confirm({
@@ -638,7 +614,7 @@ export default function RoastLog({
         <Space size={10} wrap>
           <strong>Roast #{num}</strong>
           <Rate disabled allowHalf value={r.rating || 0} style={{ fontSize: 13 }} />
-          <Tag>{r.date}</Tag>
+          <Tag>{dayjs(r.date).format("D MMM YYYY")}</Tag>
           {r.colourLevel && (
             <Tag color={COLOUR_TAG[r.colourLevel] || "default"}>
               {r.colourLevel}
@@ -754,10 +730,17 @@ export default function RoastLog({
 
           <Divider />
 
-          {/* ── Delete roast ─────────────────────────────────────── */}
-          <Button danger size="small" icon={<DeleteOutlined />} onClick={() => confirmDeleteRoast(r.id)}>
-            Delete this roast
-          </Button>
+          <Space wrap>
+            {onCompare && (
+              <Button size="small" icon={<SwapOutlined />} onClick={() => onCompare(roastKey(bean.id, r.id))}>
+                Compare with another roast
+              </Button>
+            )}
+            {/* ── Delete roast ─────────────────────────────────────── */}
+            <Button danger size="small" icon={<DeleteOutlined />} onClick={() => confirmDeleteRoast(r.id)}>
+              Delete this roast
+            </Button>
+          </Space>
         </Card>
       ),
     };
@@ -777,20 +760,28 @@ export default function RoastLog({
         </Text>
       </div>
 
-      <Space style={{ marginBottom: 16 }}>
-        <Button
-          type={sortMode === "date" ? "primary" : "default"}
+      <Space style={{ marginBottom: 16 }} wrap>
+        <Text type="secondary">Sort by</Text>
+        <Segmented
           size="small"
-          onClick={() => setSortMode("date")}
-        >
-          Sort by Date
-        </Button>
+          value={sortMode}
+          onChange={(v) => {
+            setSortMode(v);
+            setSortDesc(true);
+          }}
+          options={[
+            { label: "Date", value: "date" },
+            { label: "Rating", value: "rating" },
+          ]}
+        />
         <Button
-          type={sortMode === "rating" ? "primary" : "default"}
           size="small"
-          onClick={() => setSortMode("rating")}
+          icon={sortDesc ? <SortDescendingOutlined /> : <SortAscendingOutlined />}
+          onClick={() => setSortDesc((d) => !d)}
         >
-          Sort by Rating
+          {sortMode === "date"
+            ? sortDesc ? "Newest first" : "Oldest first"
+            : sortDesc ? "Highest first" : "Lowest first"}
         </Button>
       </Space>
 
